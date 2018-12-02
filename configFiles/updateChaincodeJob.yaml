@@ -1,0 +1,27 @@
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: updatechaincode
+spec:
+  backoffLimit: 1
+  template:
+    metadata:
+      name: updatechaincode
+    spec:
+      restartPolicy: "Never"
+      volumes:
+      - name: sharedvolume
+        persistentVolumeClaim:
+          claimName: shared-pvc
+      - name: dockersocket
+        hostPath:
+          path: /var/run/docker.sock
+      containers:
+      - name: updatechaincode
+        image: alpine:3.7
+        imagePullPolicy: Always
+        command: ["sh", "-c", "ls -l /shared; rm -rf /shared/chaincode/*; ls -l /shared/chaincode; while [ ! -d /shared/artifacts/chaincode ]; do echo Waiting for artifacts/chaincode to be copied; sleep 2; done; sleep 10; ls -l /shared/artifacts/chaincode; "]
+        volumeMounts:
+        - mountPath: /shared
+          name: sharedvolume

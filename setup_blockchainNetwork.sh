@@ -7,27 +7,6 @@ else
     exit
 fi
 
-# Create Docker deployment
-if [ "$(cat configFiles/peersDeployment.yaml | grep -c tcp://docker:2375)" != "0" ]; then
-    echo "peersDeployment.yaml file was configured to use Docker in a container."
-    echo "Creating Docker deployment"
-
-    kubectl create -f ${KUBECONFIG_FOLDER}/docker-volume.yaml
-    kubectl create -f ${KUBECONFIG_FOLDER}/docker.yaml
-    sleep 5
-
-    dockerPodStatus=$(kubectl get pods --selector=name=docker --output=jsonpath={.items..phase})
-
-    while [ "${dockerPodStatus}" != "Running" ]; do
-        echo "Wating for Docker container to run. Current status of Docker is ${dockerPodStatus}"
-        sleep 5;
-        if [ "${dockerPodStatus}" == "Error" ]; then
-            echo "There is an error in the Docker pod. Please check logs."
-            exit 1
-        fi
-        dockerPodStatus=$(kubectl get pods --selector=name=docker --output=jsonpath={.items..phase})
-    done
-fi
 
 # Creating Persistant Volume
 echo -e "\nCreating volume"
@@ -74,7 +53,7 @@ while [ "${podSTATUS}" != "Running" ]; do
     podSTATUS=$(kubectl get pods --selector=job-name=copyartifacts --output=jsonpath={.items..phase})
 done
 
-echo -e "${pod} is now ${podSTATUS}"
+echo -e "pod \"${pod}\" is now ${podSTATUS}"
 echo -e "\nStarting to copy artifacts in persistent volume."
 
 #fix for this script to work on icp and ICS
@@ -82,37 +61,38 @@ kubectl cp ./artifacts $pod:/shared/
 
 echo "Waiting for 10 more seconds for copying artifacts to avoid any network delay"
 sleep 10
-JOBSTATUS=$(kubectl get jobs |grep "copyartifacts" |awk '{print $3}')
+#JOBSTATUS=$(kubectl get jobs |grep "copyartifacts" |awk '{print $2}')
+JOBSTATUS=$(kubectl get jobs --selector=job-name=copyartifacts --output=jsonpath={.items..status.succeeded})
 while [ "${JOBSTATUS}" != "1" ]; do
     echo "Waiting for copyartifacts job to complete"
     sleep 1;
-    PODSTATUS=$(kubectl get pods | grep "copyartifacts" | awk '{print $3}')
+    PODSTATUS=$(kubectl get pods | grep "copyartifacts" | awk '{print $2}')
         if [ "${PODSTATUS}" == "Error" ]; then
             echo "There is an error in copyartifacts job. Please check logs."
             exit 1
         fi
-    JOBSTATUS=$(kubectl get jobs |grep "copyartifacts" |awk '{print $3}')
+    JOBSTATUS=$(kubectl get jobs --selector=job-name=copyartifacts --output=jsonpath={.items..status.succeeded})
 done
 echo "Copy artifacts job completed"
-
 
 # Generate Network artifacts using configtx.yaml and crypto-config.yaml
 echo -e "\nGenerating the required artifacts for Blockchain network"
 echo "Running: kubectl create -f ${KUBECONFIG_FOLDER}/generateArtifactsJob.yaml"
 kubectl create -f ${KUBECONFIG_FOLDER}/generateArtifactsJob.yaml
 
-JOBSTATUS=$(kubectl get jobs |grep utils|awk '{print $3}')
+JOBSTATUS=$(kubectl get jobs --selector=job-name=utils --output=jsonpath={.items..status.succeeded})
 while [ "${JOBSTATUS}" != "1" ]; do
     echo "Waiting for generateArtifacts job to complete"
     sleep 1;
     # UTILSLEFT=$(kubectl get pods | grep utils | awk '{print $2}')
-    UTILSSTATUS=$(kubectl get pods | grep "utils" | awk '{print $3}')
+    UTILSSTATUS=$(kubectl get pods | grep "utils" | awk '{print $2}')
     if [ "${UTILSSTATUS}" == "Error" ]; then
             echo "There is an error in utils job. Please check logs."
             exit 1
     fi
     # UTILSLEFT=$(kubectl get pods | grep utils | awk '{print $2}')
-    JOBSTATUS=$(kubectl get jobs |grep utils|awk '{print $3}')
+    #JOBSTATUS=$(kubectl get jobs |grep utils|awk '{print $2}')
+    JOBSTATUS=$(kubectl get jobs --selector=job-name=utils --output=jsonpath={.items..status.succeeded})
 done
 
 
@@ -132,6 +112,7 @@ echo "Checking if all deployments are ready"
 NUMPENDING=$(kubectl get deployments | grep blockchain | awk '{print $5}' | grep 0 | wc -l | awk '{print $1}')
 while [ "${NUMPENDING}" != "0" ]; do
     echo "Waiting on pending deployments. Deployments pending = ${NUMPENDING}"
+    #kubectl get deployments
     NUMPENDING=$(kubectl get deployments | grep blockchain | awk '{print $5}' | grep 0 | wc -l | awk '{print $1}')
     sleep 1
 done
@@ -145,7 +126,9 @@ echo -e "\nCreating channel transaction artifact and a channel"
 echo "Running: kubectl create -f ${KUBECONFIG_FOLDER}/create_channel.yaml"
 kubectl create -f ${KUBECONFIG_FOLDER}/create_channel.yaml
 
-JOBSTATUS=$(kubectl get jobs |grep createchannel |awk '{print $3}')
+#JOBSTATUS=$(kubectl get jobs |grep createchannel |awk '{print $2}')
+JOBSTATUS=$(kubectl get jobs --selector=job-name=createchannel --output=jsonpath={.items..status.succeeded})
+
 while [ "${JOBSTATUS}" != "1" ]; do
     echo "Waiting for createchannel job to be completed"
     sleep 1;
@@ -153,7 +136,8 @@ while [ "${JOBSTATUS}" != "1" ]; do
         echo "Create Channel Failed"
         exit 1
     fi
-    JOBSTATUS=$(kubectl get jobs |grep createchannel |awk '{print $3}')
+    #JOBSTATUS=$(kubectl get jobs |grep createchannel |awk '{print $2}')
+    JOBSTATUS=$(kubectl get jobs --selector=job-name=createchannel --output=jsonpath={.items..status.succeeded})
 done
 echo "Create Channel Completed Successfully"
 
@@ -163,7 +147,8 @@ echo -e "\nCreating joinchannel job"
 echo "Running: kubectl create -f ${KUBECONFIG_FOLDER}/join_channel.yaml"
 kubectl create -f ${KUBECONFIG_FOLDER}/join_channel.yaml
 
-JOBSTATUS=$(kubectl get jobs |grep joinchannel |awk '{print $3}')
+#JOBSTATUS=$(kubectl get jobs |grep joinchannel |awk '{print $2}')
+JOBSTATUS=$(kubectl get jobs --selector=job-name=joinchannel --output=jsonpath={.items..status.succeeded})
 while [ "${JOBSTATUS}" != "1" ]; do
     echo "Waiting for joinchannel job to be completed"
     sleep 1;
@@ -171,7 +156,8 @@ while [ "${JOBSTATUS}" != "1" ]; do
         echo "Join Channel Failed"
         exit 1
     fi
-    JOBSTATUS=$(kubectl get jobs |grep joinchannel |awk '{print $3}')
+    #JOBSTATUS=$(kubectl get jobs |grep joinchannel |awk '{print $2}')
+    JOBSTATUS=$(kubectl get jobs --selector=job-name=joinchannel --output=jsonpath={.items..status.succeeded})
 done
 echo "Join Channel Completed Successfully"
 
@@ -181,7 +167,8 @@ echo -e "\nCreating installchaincode job"
 echo "Running: kubectl create -f ${KUBECONFIG_FOLDER}/chaincode_install.yaml"
 kubectl create -f ${KUBECONFIG_FOLDER}/chaincode_install.yaml
 
-JOBSTATUS=$(kubectl get jobs |grep chaincodeinstall |awk '{print $3}')
+#JOBSTATUS=$(kubectl get jobs |grep chaincodeinstall |awk '{print $2}')
+JOBSTATUS=$(kubectl get jobs --selector=job-name=chaincodeinstall --output=jsonpath={.items..status.succeeded})
 while [ "${JOBSTATUS}" != "1" ]; do
     echo "Waiting for chaincodeinstall job to be completed"
     sleep 1;
@@ -189,7 +176,8 @@ while [ "${JOBSTATUS}" != "1" ]; do
         echo "Chaincode Install Failed"
         exit 1
     fi
-    JOBSTATUS=$(kubectl get jobs |grep chaincodeinstall |awk '{print $3}')
+    #JOBSTATUS=$(kubectl get jobs |grep chaincodeinstall |awk '{print $2}')
+    JOBSTATUS=$(kubectl get jobs --selector=job-name=chaincodeinstall --output=jsonpath={.items..status.succeeded})
 done
 echo "Chaincode Install Completed Successfully"
 
@@ -199,7 +187,8 @@ echo -e "\nCreating chaincodeinstantiate job"
 echo "Running: kubectl create -f ${KUBECONFIG_FOLDER}/chaincode_instantiate.yaml"
 kubectl create -f ${KUBECONFIG_FOLDER}/chaincode_instantiate.yaml
 
-JOBSTATUS=$(kubectl get jobs |grep chaincodeinstantiate |awk '{print $3}')
+#JOBSTATUS=$(kubectl get jobs |grep chaincodeinstantiate |awk '{print $2}')
+JOBSTATUS=$(kubectl get jobs --selector=job-name=chaincodeinstantiate --output=jsonpath={.items..status.succeeded})
 while [ "${JOBSTATUS}" != "1" ]; do
     echo "Waiting for chaincodeinstantiate job to be completed"
     sleep 1;
@@ -207,9 +196,15 @@ while [ "${JOBSTATUS}" != "1" ]; do
         echo "Chaincode Instantiation Failed"
         exit 1
     fi
-    JOBSTATUS=$(kubectl get jobs |grep chaincodeinstantiate |awk '{print $3}')
+    #JOBSTATUS=$(kubectl get jobs |grep chaincodeinstantiate |awk '{print $2}')
+    JOBSTATUS=$(kubectl get jobs --selector=job-name=chaincodeinstantiate --output=jsonpath={.items..status.succeeded})
 done
 echo "Chaincode Instantiation Completed Successfully"
+
+echo "creating admin-user"
+kubectl apply -f configFiles/adminUser.yaml
+echo "admin-user token is:"
+kubectl describe secret $(kubectl describe sa admin-user -n kube-system |grep Token |awk '{print $2}') -n kube-system |grep "token:"|awk '{print $2}'
 
 sleep 15
 echo -e "\nNetwork Setup Completed !!"

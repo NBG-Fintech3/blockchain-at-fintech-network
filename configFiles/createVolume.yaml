@@ -25,7 +25,6 @@ spec:
   resources:
     requests:
       storage: 1Gi
-  storageClassName: ""
   selector:
     matchLabels:
       name: sharedvolume
